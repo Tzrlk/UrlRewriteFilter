@@ -262,33 +262,43 @@ public class UrlRewriteFilter implements Filter {
     }
 
     private void loadUrlRewriterLocal() {
-        InputStream inputStream = context.getResourceAsStream(confPath);
-        // attempt to retrieve from location other than local WEB-INF
-        if ( inputStream == null ) {
-            inputStream = ClassLoader.getSystemResourceAsStream(confPath);
-        }
         URL confUrl = null;
+        InputStream inputStream = null;
+
+        // Try finding the configuration directly in the application context.
         try {
             confUrl = context.getResource(confPath);
+            if (confUrl != null) {
+                inputStream = context.getResourceAsStream(confUrl.getPath());
+            }
         } catch (MalformedURLException e) {
             log.debug(e);
         }
-        String confUrlStr = null;
-        if (confUrl != null) {
-            confUrlStr = confUrl.toString();
+
+        // Try finding the configuration on the current classpath.
+        if (confUrl == null) {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            confUrl = classLoader.getResource(confPath);
+            if (confUrl != null) {
+                inputStream = classLoader.getResourceAsStream(confUrl.getPath());
+            }
         }
-        if (inputStream == null) {
+
+        // Give up if no path or stream was found.
+        if (confUrl == null || inputStream == null) {
             log.error("unable to find urlrewrite conf file at " + confPath);
+
             // set the writer back to null
             if (urlRewriter != null) {
                 log.error("unloading existing conf");
                 urlRewriter = null;
             }
 
-        } else {
-            Conf conf = new Conf(context, inputStream, confPath, confUrlStr, modRewriteStyleConf);
-            checkConf(conf);
+            return;
         }
+
+        Conf conf = new Conf(context, inputStream, confPath, confUrl.toString(), modRewriteStyleConf);
+        checkConf(conf);
     }
 
     /**
